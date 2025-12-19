@@ -19,7 +19,6 @@ from transformers import AutoProcessor, AutoModelForCausalLM
 
 sys.path.insert(0, "ai-toolkit")
 from toolkit.job import get_job
-from toolkit.job_zip_handler import export_job, import_job
 
 MAX_IMAGES = 150
 
@@ -233,21 +232,6 @@ def start_training(
 
     return f"Training completed successfully. Model saved as {slugged_lora_name}"
 
-def export_job_ui(lora_name):
-    if not lora_name:
-        raise gr.Error("You forgot to insert your LoRA name!")
-    slugged_lora_name = slugify(lora_name)
-    with tempfile.TemporaryDirectory() as temp_dir:
-        output_path = os.path.join(temp_dir, f"{slugged_lora_name}.zip")
-        export_job(slugged_lora_name, output_path)
-        return output_path
-
-def import_job_ui(zip_file):
-    if zip_file is None:
-        raise gr.Error("Please upload a zip file.")
-    import_job(zip_file.name)
-    return "Job imported successfully."
-
 config_yaml = '''
 device: cuda:0
 model:
@@ -305,19 +289,6 @@ with gr.Blocks(theme=theme, css=css) as demo:
 ### Train a high quality FLUX LoRA in a breeze ༄ using [Ostris' AI Toolkit](https://github.com/ostris/ai-toolkit)"""
     )
     with gr.Column() as main_ui:
-        with gr.Accordion("Import/Export Job", open=False):
-            with gr.Row():
-                import_zip = gr.File(
-                    label="Import Job from Zip",
-                    file_types=[".zip"],
-                    interactive=True
-                )
-                import_button = gr.Button("Import Job")
-            with gr.Row():
-                exported_zip = gr.File(
-                    label="Exported Job Zip",
-                    interactive=False
-                )
         with gr.Row():
             lora_name = gr.Textbox(
                 label="The name of your LoRA",
@@ -359,7 +330,9 @@ with gr.Blocks(theme=theme, css=css) as demo:
                                     min_width=111,
                                     interactive=False,
                                     scale=2,
-                                    show_label=False
+                                    show_label=False,
+                                    show_share_button=False,
+                                    show_download_button=False,
                                 )
                                 locals()[f"caption_{i}"] = gr.Textbox(
                                     label=f"Caption {i}", scale=15, interactive=True
@@ -392,10 +365,8 @@ with gr.Blocks(theme=theme, css=css) as demo:
         output_components.append(sample_1)
         output_components.append(sample_2)
         output_components.append(sample_3)
-        with gr.Row(visible=False) as action_buttons:
-            start = gr.Button("Start training")
-            export_button = gr.Button("Export Job")
-        output_components.append(action_buttons)
+        start = gr.Button("Start training", visible=False)
+        output_components.append(start)
         progress_area = gr.Markdown("")
 
     dataset_folder = gr.State()
@@ -414,7 +385,7 @@ with gr.Blocks(theme=theme, css=css) as demo:
 
     images.clear(
         hide_captioning,
-        outputs=[captioning_area, sample, action_buttons]
+        outputs=[captioning_area, sample, start]
     )
     
     start.click(fn=create_dataset, inputs=[images] + caption_list, outputs=dataset_folder).then(
@@ -437,20 +408,7 @@ with gr.Blocks(theme=theme, css=css) as demo:
         outputs=progress_area,
     )
 
-    export_button.click(
-        fn=export_job_ui,
-        inputs=[lora_name],
-        outputs=exported_zip
-    )
-
     do_captioning.click(fn=run_captioning, inputs=[images, concept_sentence] + caption_list, outputs=caption_list)
-
-    import_button.click(
-        fn=import_job_ui,
-        inputs=[import_zip],
-        outputs=progress_area,
-        _js="() => confirm('Are you sure you want to import this job? This will overwrite any existing job with the same name.')"
-    )
 
 if __name__ == "__main__":
     demo.launch(share=True, show_error=True)
